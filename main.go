@@ -34,7 +34,7 @@ import (
 	"compress/gzip"
 )
 
-const longestRead = 100000
+const longestRead = 1000000
 const numBases = 5
 const highestScore = 127
 
@@ -58,10 +58,10 @@ func main() {
 	var quals [longestRead][highestScore]int
 
 	// parse the fastq files to generate our stats
-	parseFastqs(fastqPaths, &bases, &quals)
+	numSeqs := parseFastqs(fastqPaths, &bases, &quals)
 
 	// print out the results
-	printStats(&bases, &quals)
+	printStats(numSeqs, &bases, &quals)
 }
 
 // exitHelp prints help text and exits 0, unless a message is passed in which
@@ -95,7 +95,8 @@ func die(err error) {
 	os.Exit(1)
 }
 
-func parseFastqs(paths []string, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) {
+func parseFastqs(paths []string, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) int64 {
+	var seqs int64
 	for _, path := range paths {
 		f, err := os.Open(path)
 		if err != nil {
@@ -105,13 +106,16 @@ func parseFastqs(paths []string, bases *[longestRead][numBases]int, quals *[long
 		if err != nil {
 			die(err)
 		}
-		calculateStats(gzf, bases, quals)
+		seqs += calculateStats(gzf, bases, quals)
 	}
+	return seqs
 }
 
 func calculateStats(r io.Reader, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) int64 {
-	var sum int64
+	var seqs int64
 	scanner := bufio.NewScanner(r)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
 	line := 0
 	for scanner.Scan() {
 		line++
@@ -119,18 +123,22 @@ func calculateStats(r io.Reader, bases *[longestRead][numBases]int, quals *[long
 			line = 1
 		}
 
-		b := scanner.Bytes()
-
 		switch line {
-		case 1, 3:
+		case 1:
+			seqs++
 			continue
 		case 2:
-			handleBases(b, bases)
+			handleBases(scanner.Bytes(), bases)
+		case 3:
+			continue
 		case 4:
-			handleQuals(b, quals)
+			handleQuals(scanner.Bytes(), quals)
 		}
 	}
-	return sum
+	if err := scanner.Err(); err != nil {
+		die(err)
+	}
+	return seqs
 }
 
 func handleBases(b []byte, store *[longestRead][numBases]int) {
@@ -161,7 +169,9 @@ func handleQuals(b []byte, store *[longestRead][highestScore]int) {
 	}
 }
 
-func printStats(bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) {
+func printStats(seqs int64, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) {
+	fmt.Printf("sequences: %d\n", seqs)
+
 	fmt.Println("bases (A,C,G,T,N):")
 	last := 0
 	for i, c := range bases {
