@@ -38,6 +38,9 @@ const longestRead = 1000000
 const numBases = 5
 const highestScore = 127
 
+type baseStore [longestRead][numBases]int64
+type qualStore [longestRead][highestScore]int64
+
 var l = log.New(os.Stderr, "", 0)
 
 func main() {
@@ -54,8 +57,8 @@ func main() {
 	fastqPaths := flag.Args()
 
 	// prepare arrays to store counts in
-	var bases [longestRead][numBases]int
-	var quals [longestRead][highestScore]int
+	var bases baseStore
+	var quals qualStore
 
 	// parse the fastq files to generate our stats
 	numSeqs := parseFastqs(fastqPaths, &bases, &quals)
@@ -95,7 +98,7 @@ func die(err error) {
 	os.Exit(1)
 }
 
-func parseFastqs(paths []string, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) int64 {
+func parseFastqs(paths []string, bases *baseStore, quals *qualStore) int64 {
 	var seqs int64
 	for _, path := range paths {
 		f, err := os.Open(path)
@@ -111,7 +114,7 @@ func parseFastqs(paths []string, bases *[longestRead][numBases]int, quals *[long
 	return seqs
 }
 
-func calculateStats(r io.Reader, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) int64 {
+func calculateStats(r io.Reader, bases *baseStore, quals *qualStore) int64 {
 	var seqs int64
 	scanner := bufio.NewScanner(r)
 	buf := make([]byte, 0, 64*1024)
@@ -141,7 +144,7 @@ func calculateStats(r io.Reader, bases *[longestRead][numBases]int, quals *[long
 	return seqs
 }
 
-func handleBases(b []byte, store *[longestRead][numBases]int) {
+func handleBases(b []byte, store *baseStore) {
 	for i, base := range b {
 		var j int
 		switch base {
@@ -163,13 +166,13 @@ func handleBases(b []byte, store *[longestRead][numBases]int) {
 	}
 }
 
-func handleQuals(b []byte, store *[longestRead][highestScore]int) {
+func handleQuals(b []byte, store *qualStore) {
 	for i, qual := range b {
 		store[i][qual]++
 	}
 }
 
-func printStats(seqs int64, bases *[longestRead][numBases]int, quals *[longestRead][highestScore]int) {
+func printStats(seqs int64, bases *baseStore, quals *qualStore) {
 	fmt.Printf("sequences: %d\n", seqs)
 
 	fmt.Println("bases (A,C,G,T,N):")
